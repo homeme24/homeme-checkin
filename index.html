@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Homeme 打卡</title>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+<style>
+body{
+font-family:sans-serif;
+background:#f7f1ea;
+padding:20px;
+margin:0;
+color:#4d3c2d;
+}
+
+.card{
+background:white;
+border-radius:20px;
+padding:20px;
+margin-bottom:20px;
+box-shadow:0 4px 10px rgba(0,0,0,0.08);
+text-align:center;
+}
+
+.avatar{
+width:100px;
+height:100px;
+border-radius:50%;
+object-fit:cover;
+margin-bottom:10px;
+}
+
+button{
+background:#c79b6b;
+color:white;
+border:none;
+padding:14px 20px;
+border-radius:999px;
+font-size:18px;
+width:100%;
+cursor:pointer;
+}
+
+.ranking-item{
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:10px 0;
+border-bottom:1px solid #eee;
+}
+
+.left{
+display:flex;
+align-items:center;
+gap:10px;
+}
+
+.left img{
+width:40px;
+height:40px;
+border-radius:50%;
+}
+</style>
+</head>
+
+<body>
+
+<div class="card">
+
+<img id="avatar" class="avatar">
+
+<h2 id="name">載入中...</h2>
+
+<p>🏆 歷年累積：<span id="total">0</span> 次</p>
+
+<p>📅 今年累積：<span id="year">0</span> 次</p>
+
+<p>🗓️ 本月累積：<span id="month">0</span> 次</p>
+
+<button onclick="checkin()">
+今日打卡🐾
+</button>
+
+<p id="message"></p>
+
+</div>
+
+<div class="card">
+
+<h3>🏆 TOP10 排行榜</h3>
+
+<div id="ranking"></div>
+
+</div>
+
+<script>
+
+const SUPABASE_URL =
+'https://lepxxpkwprfkbbitfsdh.supabase.co';
+
+const SUPABASE_KEY =
+'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlcHh4cGt3cHJma2JiaXRmc2RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNDUyNTUsImV4cCI6MjA5NDkyMTI1NX0.zKgN5XMaGtJkYHGzQge0ewBwThAMbByirfkPW-oPUrU';
+
+const LIFF_ID =
+'2010154662-DEjrZwtp';
+
+let profile;
+
+async function init(){
+
+await liff.init({
+liffId: LIFF_ID
+});
+
+if(!liff.isLoggedIn()){
+liff.login();
+return;
+}
+
+profile = await liff.getProfile();
+
+document.getElementById('avatar').src =
+profile.pictureUrl;
+
+document.getElementById('name').innerText =
+profile.displayName;
+
+loadUser();
+loadRanking();
+
+}
+
+async function loadUser(){
+
+const res = await fetch(
+`${SUPABASE_URL}/rest/v1/users?line_user_id=eq.${profile.userId}`,
+{
+headers:{
+apikey:SUPABASE_KEY,
+Authorization:`Bearer ${SUPABASE_KEY}`
+}
+}
+);
+
+const data = await res.json();
+
+if(data.length > 0){
+
+document.getElementById('total').innerText =
+data[0].total_count || 0;
+
+document.getElementById('year').innerText =
+data[0].year_count || 0;
+
+document.getElementById('month').innerText =
+data[0].month_count || 0;
+
+}
+
+}
+
+async function checkin(){
+
+const res = await fetch(
+`${SUPABASE_URL}/rest/v1/rpc/checkin_user`,
+{
+method:'POST',
+headers:{
+'Content-Type':'application/json',
+apikey:SUPABASE_KEY,
+Authorization:`Bearer ${SUPABASE_KEY}`
+},
+body:JSON.stringify({
+p_line_user_id:profile.userId,
+p_name:profile.displayName,
+p_avatar_url:profile.pictureUrl
+})
+}
+);
+
+const data = await res.json();
+
+document.getElementById('message').innerText =
+data.message;
+
+document.getElementById('total').innerText =
+data.total_count;
+
+document.getElementById('year').innerText =
+data.year_count;
+
+document.getElementById('month').innerText =
+data.month_count;
+
+loadRanking();
+
+}
+
+async function loadRanking(){
+
+const res = await fetch(
+`${SUPABASE_URL}/rest/v1/leaderboard`,
+{
+headers:{
+apikey:SUPABASE_KEY,
+Authorization:`Bearer ${SUPABASE_KEY}`
+}
+}
+);
+
+const data = await res.json();
+
+const ranking =
+document.getElementById('ranking');
+
+ranking.innerHTML = '';
+
+data.forEach((user,index)=>{
+
+let medal = '';
+
+if(index===0) medal='🥇';
+if(index===1) medal='🥈';
+if(index===2) medal='🥉';
+
+ranking.innerHTML += `
+<div class="ranking-item">
+
+<div class="left">
+<img src="${user.avatar_url}">
+<div>${medal} ${user.name}</div>
+</div>
+
+<div>${user.total_count} 次</div>
+
+</div>
+`;
+
+});
+
+}
+
+init();
+
+</script>
+
+</body>
+</html>
