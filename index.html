@@ -102,7 +102,7 @@ const SUPABASE_URL =
 'https://lepxxpkwprfkbbitfsdh.supabase.co';
 
 const SUPABASE_KEY =
-'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlcHh4cGt3cHJma2JiaXRmc2RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNDUyNTUsImV4cCI6MjA5NDkyMTI1NX0.zKgN5XMaGtJkYHGzQge0ewBwThAMbByirfkPW-oPUrU';
+'你的SUPABASE_ANON_KEY';
 
 const LIFF_ID =
 '2010154662-DEjrZwtp';
@@ -125,9 +125,6 @@ profile = await liff.getProfile();
 document.getElementById('avatar').src =
 profile.pictureUrl;
 
-document.getElementById('name').innerText =
-profile.displayName;
-
 loadUser();
 loadRanking();
 
@@ -149,6 +146,9 @@ const data = await res.json();
 
 if(data.length > 0){
 
+document.getElementById('name').innerText =
+data[0].custom_name || data[0].name || profile.displayName;
+
 document.getElementById('total').innerText =
 data[0].total_count || 0;
 
@@ -157,6 +157,11 @@ data[0].year_count || 0;
 
 document.getElementById('month').innerText =
 data[0].month_count || 0;
+
+}else{
+
+document.getElementById('name').innerText =
+profile.displayName;
 
 }
 
@@ -186,16 +191,8 @@ const data = await res.json();
 document.getElementById('message').innerText =
 data.message;
 
-document.getElementById('total').innerText =
-data.total_count;
-
-document.getElementById('year').innerText =
-data.year_count;
-
-document.getElementById('month').innerText =
-data.month_count;
-
-loadRanking();
+await loadUser();
+await loadRanking();
 
 }
 
@@ -230,11 +227,11 @@ ranking.innerHTML += `
 <div class="ranking-item">
 
 <div class="left">
-<img src="${user.avatar_url}">
-<div>${medal} ${user.name}</div>
+<img src="${user.avatar_url || ''}">
+<div>${medal} ${user.custom_name || user.name}</div>
 </div>
 
-<div>${user.total_count} 次</div>
+<div>${user.total_count || 0} 次</div>
 
 </div>
 `;
