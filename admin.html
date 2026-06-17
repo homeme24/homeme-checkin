@@ -12,6 +12,7 @@ button{background:#c79b6b;color:white;border:none;font-weight:bold;cursor:pointe
 .row{border-bottom:1px solid #eee;padding:12px 0;}
 .small{font-size:13px;color:#777;}
 .tag{display:inline-block;background:#f1dfc9;padding:3px 8px;border-radius:999px;font-size:13px;margin-left:4px;}
+.detail{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed #ddd;}
 </style>
 </head>
 
@@ -27,13 +28,12 @@ if(prompt('請輸入後台密碼') !== 'homeme2026'){
 <div class="card">
 <h2>🐶 Homeme 後台</h2>
 <input id="keyword" placeholder="搜尋名字 / 顯示名字 / LINE ID">
-<button onclick="searchUsers()">搜尋會員</button>
-<button onclick="loadAllUsers()">顯示目前有打卡過的名單</button>
+<button onclick="searchUsers()">搜尋</button>
 </div>
 
 <div class="card">
-<h3>會員列表 / 搜尋結果</h3>
-<div id="userList"></div>
+<h3>會員列表</h3>
+<div id="userList">載入中...</div>
 </div>
 
 <div class="card">
@@ -54,34 +54,17 @@ const headers = {
   'Content-Type': 'application/json'
 };
 
-async function loadAllUsers(){
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/users?total_count=gt.0&order=total_count.desc`,
-    { headers }
-  );
-
-  const data = await res.json();
-  renderUsers(data);
-}
-
 async function searchUsers(){
   const k = document.getElementById('keyword').value.trim();
 
-  if(!k){
-    loadAllUsers();
-    return;
+  let url = `${SUPABASE_URL}/rest/v1/users?total_count=gt.0&order=total_count.desc`;
+
+  if(k){
+    const encoded = encodeURIComponent(k);
+    url = `${SUPABASE_URL}/rest/v1/users?or=(name.ilike.*${encoded}*,custom_name.ilike.*${encoded}*,line_user_id.ilike.*${encoded}*)&order=total_count.desc`;
   }
 
-  const encoded = encodeURIComponent(k);
-
-  const query =
-    `or=(name.ilike.*${encoded}*,custom_name.ilike.*${encoded}*,line_user_id.ilike.*${encoded}*)`;
-
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/users?${query}&order=total_count.desc`,
-    { headers }
-  );
-
+  const res = await fetch(url,{ headers });
   const data = await res.json();
   renderUsers(data);
 }
@@ -91,34 +74,43 @@ function renderUsers(data){
   box.innerHTML = '';
 
   if(data.length === 0){
-    box.innerHTML = '找不到會員';
+    box.innerHTML = '目前沒有資料';
     return;
   }
 
   data.forEach(u=>{
     const displayName = u.custom_name || u.name || '未命名';
-    const vipTag = u.is_member ? '<span class="tag">VIP</span>' : '';
+    const vipTag = u.is_member ? '<span class="tag">💳 VIP</span>' : '<span class="tag">非會員</span>';
 
     box.innerHTML += `
       <div class="row">
         <div><b>${displayName}</b> ${vipTag}</div>
-        <div class="small">LINE 名稱：${u.name || ''}</div>
-        <div class="small">LINE ID：${u.line_user_id}</div>
-        <div>總次數：${u.total_count || 0}｜今年：${u.year_count || 0}｜本月：${u.month_count || 0}</div>
+        <button onclick="toggleDetail(${u.id})">管理</button>
 
-        <input id="custom_${u.id}" placeholder="前台顯示名字" value="${u.custom_name || ''}">
+        <div class="detail" id="detail_${u.id}">
+          <div class="small">LINE 名稱：${u.name || ''}</div>
+          <div class="small">LINE ID：${u.line_user_id}</div>
+          <div>總次數：${u.total_count || 0}｜今年：${u.year_count || 0}｜本月：${u.month_count || 0}</div>
 
-        <select id="member_${u.id}">
-          <option value="false" ${!u.is_member ? 'selected' : ''}>非會員</option>
-          <option value="true" ${u.is_member ? 'selected' : ''}>VIP會員</option>
-        </select>
+          <input id="custom_${u.id}" placeholder="前台顯示名字" value="${u.custom_name || ''}">
 
-        <button onclick="updateUser(${u.id})">儲存前台名字 / VIP狀態</button>
-        <button onclick="addCount(${u.id}, ${u.total_count || 0}, ${u.year_count || 0}, ${u.month_count || 0}, 1)">補 +1 次</button>
-        <button onclick="addCount(${u.id}, ${u.total_count || 0}, ${u.year_count || 0}, ${u.month_count || 0}, 5)">補 +5 次</button>
+          <select id="member_${u.id}">
+            <option value="false" ${!u.is_member ? 'selected' : ''}>非會員</option>
+            <option value="true" ${u.is_member ? 'selected' : ''}>💳 VIP會員</option>
+          </select>
+
+          <button onclick="updateUser(${u.id})">儲存前台名字 / 會員狀態</button>
+          <button onclick="addCount(${u.id}, ${u.total_count || 0}, ${u.year_count || 0}, ${u.month_count || 0}, 1)">補 +1 次</button>
+          <button onclick="addCount(${u.id}, ${u.total_count || 0}, ${u.year_count || 0}, ${u.month_count || 0}, 5)">補 +5 次</button>
+        </div>
       </div>
     `;
   });
+}
+
+function toggleDetail(id){
+  const el = document.getElementById(`detail_${id}`);
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
 }
 
 async function updateUser(id){
@@ -197,6 +189,7 @@ async function approveRequest(id){
   const data = await res.json();
   alert(data.message || '已通過');
   loadRequests();
+  searchUsers();
 }
 
 async function rejectRequest(id){
@@ -217,7 +210,7 @@ async function rejectRequest(id){
 }
 
 loadRequests();
-loadAllUsers();
+searchUsers();
 </script>
 
 </body>
