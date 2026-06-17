@@ -95,7 +95,7 @@ async function loadUser(){
   if(data.length > 0){
     const u = data[0];
     const displayName = u.custom_name || u.name || profile.displayName;
-    const icon = u.is_member ? (u.member_icon || '⭐') : '';
+    const icon = u.is_member ? 'VIP' : '';
 
     document.getElementById('name').innerHTML =
       `${displayName} ${icon ? `<span class="badge">${icon}</span>` : ''}`;
@@ -187,7 +187,7 @@ async function loadRanking(){
     if(index===2) medal='🥉';
 
     const displayName = user.custom_name || user.name || '未命名';
-    const icon = user.is_member ? (user.member_icon || '⭐') : '';
+    const icon = user.is_member ? 'VIP' : '';
 
     ranking.innerHTML += `
       <div class="ranking-item">
