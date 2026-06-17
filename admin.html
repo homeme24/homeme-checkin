@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Homeme 後台</title>
+<style>
+body{font-family:sans-serif;background:#f7f1ea;padding:20px;margin:0;color:#4d3c2d;}
+.card{background:white;border-radius:18px;padding:18px;margin-bottom:16px;box-shadow:0 4px 10px rgba(0,0,0,0.08);}
+input,textarea,select,button{width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #ddd;margin:6px 0;}
+button{background:#c79b6b;color:white;border:none;font-weight:bold;cursor:pointer;}
+.row{border-bottom:1px solid #eee;padding:12px 0;}
+.small{font-size:13px;color:#777;}
+</style>
+</head>
+
+<body>
+
+<script>
+if(prompt('請輸入後台密碼') !== 'homeme2026'){
+  document.body.innerHTML = '❌ 無權限';
+  throw new Error('no permission');
+}
+</script>
+
+<div class="card">
+<h2>🐶 Homeme 後台</h2>
+<input id="keyword" placeholder="搜尋名字 / 顯示名字 / LINE ID">
+<button onclick="searchUsers()">搜尋會員</button>
+</div>
+
+<div class="card">
+<h3>搜尋結果</h3>
+<div id="userList"></div>
+</div>
+
+<div class="card">
+<h3>待審核補打卡</h3>
+<button onclick="loadRequests()">重新整理申請</button>
+<div id="requestList"></div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://lepxxpkwprfkbbitfsdh.supabase.co';
+
+const SUPABASE_KEY =
+'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlcHh4cGt3cHJma2JiaXRmc2RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNDUyNTUsImV4cCI6MjA5NDkyMTI1NX0.zKgN5XMaGtJkYHGzQge0ewBwThAMbByirfkPW-oPUrU';
+
+const headers = {
+  apikey: SUPABASE_KEY,
+  Authorization: `Bearer ${SUPABASE_KEY}`,
+  'Content-Type': 'application/json'
+};
+
+async function searchUsers(){
+  const k = document.getElementById('keyword').value.trim();
+  if(!k){
+    alert('請輸入搜尋內容');
+    return;
+  }
+
+  const query =
+    `or=(name.ilike.*${encodeURIComponent(k)}*,custom_name.ilike.*${encodeURIComponent(k)}*,line_user_id.ilike.*${encodeURIComponent(k)}*)`;
+
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/users?${query}&order=total_count.desc`, { headers });
+  const data = await res.json();
+
+  const box = document.getElementById('userList');
+  box.innerHTML = '';
+
+  if(data.length === 0){
+    box.innerHTML = '找不到會員';
+    return;
+  }
+
+  data.forEach(u=>{
+    box.innerHTML += `
+      <div class="row">
+        <div><b>${u.custom_name || u.name || '未命名'}</b></div>
+        <div class="small">LINE名稱：${u.name || ''}</div>
+        <div class="small">LINE ID：${u.line_user_id}</div>
+        <div>總次數：${u.total_count || 0}｜今年：${u.year_count || 0}｜本月：${u.month_count || 0}</div>
+
+        <input id="custom_${u.id}" placeholder="店內顯示名字" value="${u.custom_name || ''}">
+        <input id="icon_${u.id}" placeholder="會員圖示，例如 ⭐ 🐶 👑" value="${u.member_icon || ''}">
+
+        <select id="member_${u.id}">
+          <option value="false" ${!u.is_member ? 'selected' : ''}>非會員</option>
+          <option value="true" ${u.is_member ? 'selected' : ''}>會員</option>
+        </select>
+
+        <button onclick="updateUser(${u.id})">儲存名字 / 會員標記</button>
+        <button onclick="addCount(${u.id}, ${u.total_count || 0}, ${u.year_count || 0}, ${u.month_count || 0}, 1)">補 +1 次</button>
+        <button onclick="addCount(${u.id}, ${u.total_count || 0}, ${u.year_count || 0}, ${u.month_count || 0}, 5)">補 +5 次</button>
+      </div>
+    `;
+  });
+}
+
+async function updateUser(id){
+  const customName = document.getElementById(`custom_${id}`).value;
+  const icon = document.getElementById(`icon_${id}`).value;
+  const isMember = document.getElementById(`member_${id}`).value === 'true';
+
+  await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${id}`,{
+    method:'PATCH',
+    headers,
+    body:JSON.stringify({
+      custom_name: customName,
+      member_icon: icon,
+      is_member: isMember
+    })
+  });
+
+  alert('已儲存');
+  searchUsers();
+}
+
+async function addCount(id,total,year,month,num){
+  await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${id}`,{
+    method:'PATCH',
+    headers,
+    body:JSON.stringify({
+      total_count: total + num,
+      year_count: year + num,
+      month_count: month + num
+    })
+  });
+
+  alert(`已補 ${num} 次`);
+  searchUsers();
+}
+
+async function loadRequests(){
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/checkin_requests?status=eq.pending&order=created_at.asc`,
+    { headers }
+  );
+
+  const data = await res.json();
+  const box = document.getElementById('requestList');
+  box.innerHTML = '';
+
+  if(data.length === 0){
+    box.innerHTML = '目前沒有待審核申請';
+    return;
+  }
+
+  data.forEach(r=>{
+    box.innerHTML += `
+      <div class="row">
+        <div><b>${r.name}</b></div>
+        <div>申請補打卡日期：${r.request_date}</div>
+        <div class="small">原因：${r.reason || '未填'}</div>
+        <textarea id="note_${r.id}" placeholder="管理備註，可不填"></textarea>
+        <button onclick="approveRequest(${r.id})">通過補打卡</button>
+        <button onclick="rejectRequest(${r.id})" style="background:#999;">拒絕</button>
+      </div>
+    `;
+  });
+}
+
+async function approveRequest(id){
+  const note = document.getElementById(`note_${id}`).value;
+
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/approve_checkin_request`,{
+    method:'POST',
+    headers,
+    body:JSON.stringify({
+      p_request_id:id,
+      p_admin_note:note
+    })
+  });
+
+  const data = await res.json();
+  alert(data.message || '已通過');
+  loadRequests();
+}
+
+async function rejectRequest(id){
+  const note = document.getElementById(`note_${id}`).value;
+
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reject_checkin_request`,{
+    method:'POST',
+    headers,
+    body:JSON.stringify({
+      p_request_id:id,
+      p_admin_note:note
+    })
+  });
+
+  const data = await res.json();
+  alert(data.message || '已拒絕');
+  loadRequests();
+}
+
+loadRequests();
+</script>
+
+</body>
+</html>
