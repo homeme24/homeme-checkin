@@ -11,6 +11,7 @@ input,textarea,select,button{width:100%;box-sizing:border-box;padding:12px;borde
 button{background:#c79b6b;color:white;border:none;font-weight:bold;cursor:pointer;}
 .row{border-bottom:1px solid #eee;padding:12px 0;}
 .small{font-size:13px;color:#777;}
+.tag{display:inline-block;background:#f1dfc9;padding:3px 8px;border-radius:999px;font-size:13px;margin-left:4px;}
 </style>
 </head>
 
@@ -27,10 +28,11 @@ if(prompt('請輸入後台密碼') !== 'homeme2026'){
 <h2>🐶 Homeme 後台</h2>
 <input id="keyword" placeholder="搜尋名字 / 顯示名字 / LINE ID">
 <button onclick="searchUsers()">搜尋會員</button>
+<button onclick="loadAllUsers()">顯示目前有打卡過的名單</button>
 </div>
 
 <div class="card">
-<h3>搜尋結果</h3>
+<h3>會員列表 / 搜尋結果</h3>
 <div id="userList"></div>
 </div>
 
@@ -52,19 +54,39 @@ const headers = {
   'Content-Type': 'application/json'
 };
 
+async function loadAllUsers(){
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/users?total_count=gt.0&order=total_count.desc`,
+    { headers }
+  );
+
+  const data = await res.json();
+  renderUsers(data);
+}
+
 async function searchUsers(){
   const k = document.getElementById('keyword').value.trim();
+
   if(!k){
-    alert('請輸入搜尋內容');
+    loadAllUsers();
     return;
   }
 
+  const encoded = encodeURIComponent(k);
+
   const query =
-    `or=(name.ilike.*${encodeURIComponent(k)}*,custom_name.ilike.*${encodeURIComponent(k)}*,line_user_id.ilike.*${encodeURIComponent(k)}*)`;
+    `or=(name.ilike.*${encoded}*,custom_name.ilike.*${encoded}*,line_user_id.ilike.*${encoded}*)`;
 
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/users?${query}&order=total_count.desc`, { headers });
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/users?${query}&order=total_count.desc`,
+    { headers }
+  );
+
   const data = await res.json();
+  renderUsers(data);
+}
 
+function renderUsers(data){
   const box = document.getElementById('userList');
   box.innerHTML = '';
 
@@ -74,22 +96,24 @@ async function searchUsers(){
   }
 
   data.forEach(u=>{
+    const displayName = u.custom_name || u.name || '未命名';
+    const vipTag = u.is_member ? '<span class="tag">VIP</span>' : '';
+
     box.innerHTML += `
       <div class="row">
-        <div><b>${u.custom_name || u.name || '未命名'}</b></div>
-        <div class="small">LINE名稱：${u.name || ''}</div>
+        <div><b>${displayName}</b> ${vipTag}</div>
+        <div class="small">LINE 名稱：${u.name || ''}</div>
         <div class="small">LINE ID：${u.line_user_id}</div>
         <div>總次數：${u.total_count || 0}｜今年：${u.year_count || 0}｜本月：${u.month_count || 0}</div>
 
-        <input id="custom_${u.id}" placeholder="店內顯示名字" value="${u.custom_name || ''}">
-        <input id="icon_${u.id}" placeholder="會員圖示，例如 ⭐ 🐶 👑" value="${u.member_icon || ''}">
+        <input id="custom_${u.id}" placeholder="前台顯示名字" value="${u.custom_name || ''}">
 
         <select id="member_${u.id}">
           <option value="false" ${!u.is_member ? 'selected' : ''}>非會員</option>
-          <option value="true" ${u.is_member ? 'selected' : ''}>會員</option>
+          <option value="true" ${u.is_member ? 'selected' : ''}>VIP會員</option>
         </select>
 
-        <button onclick="updateUser(${u.id})">儲存名字 / 會員標記</button>
+        <button onclick="updateUser(${u.id})">儲存前台名字 / VIP狀態</button>
         <button onclick="addCount(${u.id}, ${u.total_count || 0}, ${u.year_count || 0}, ${u.month_count || 0}, 1)">補 +1 次</button>
         <button onclick="addCount(${u.id}, ${u.total_count || 0}, ${u.year_count || 0}, ${u.month_count || 0}, 5)">補 +5 次</button>
       </div>
@@ -99,7 +123,6 @@ async function searchUsers(){
 
 async function updateUser(id){
   const customName = document.getElementById(`custom_${id}`).value;
-  const icon = document.getElementById(`icon_${id}`).value;
   const isMember = document.getElementById(`member_${id}`).value === 'true';
 
   await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${id}`,{
@@ -107,7 +130,6 @@ async function updateUser(id){
     headers,
     body:JSON.stringify({
       custom_name: customName,
-      member_icon: icon,
       is_member: isMember
     })
   });
@@ -195,6 +217,7 @@ async function rejectRequest(id){
 }
 
 loadRequests();
+loadAllUsers();
 </script>
 
 </body>
