@@ -4,244 +4,204 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Homeme 打卡</title>
-
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-
 <style>
-body{
-font-family:sans-serif;
-background:#f7f1ea;
-padding:20px;
-margin:0;
-color:#4d3c2d;
-}
-
-.card{
-background:white;
-border-radius:20px;
-padding:20px;
-margin-bottom:20px;
-box-shadow:0 4px 10px rgba(0,0,0,0.08);
-text-align:center;
-}
-
-.avatar{
-width:100px;
-height:100px;
-border-radius:50%;
-object-fit:cover;
-margin-bottom:10px;
-}
-
-button{
-background:#c79b6b;
-color:white;
-border:none;
-padding:14px 20px;
-border-radius:999px;
-font-size:18px;
-width:100%;
-cursor:pointer;
-}
-
-.ranking-item{
-display:flex;
-justify-content:space-between;
-align-items:center;
-padding:10px 0;
-border-bottom:1px solid #eee;
-}
-
-.left{
-display:flex;
-align-items:center;
-gap:10px;
-}
-
-.left img{
-width:40px;
-height:40px;
-border-radius:50%;
-}
+body{font-family:sans-serif;background:#f7f1ea;padding:20px;margin:0;color:#4d3c2d;}
+.card{background:white;border-radius:20px;padding:20px;margin-bottom:20px;box-shadow:0 4px 10px rgba(0,0,0,0.08);text-align:center;}
+.avatar{width:100px;height:100px;border-radius:50%;object-fit:cover;margin-bottom:10px;}
+button{background:#c79b6b;color:white;border:none;padding:14px 20px;border-radius:999px;font-size:18px;width:100%;cursor:pointer;margin-top:8px;}
+input,textarea{width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #ddd;margin:6px 0;}
+.ranking-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #eee;}
+.left{display:flex;align-items:center;gap:10px;}
+.left img{width:40px;height:40px;border-radius:50%;object-fit:cover;}
+.badge{display:inline-block;background:#f1dfc9;padding:4px 10px;border-radius:999px;font-size:14px;margin-left:4px;}
 </style>
 </head>
 
 <body>
 
 <div class="card">
-
 <img id="avatar" class="avatar">
-
 <h2 id="name">載入中...</h2>
 
 <p>🏆 歷年累積：<span id="total">0</span> 次</p>
-
 <p>📅 今年累積：<span id="year">0</span> 次</p>
-
 <p>🗓️ 本月累積：<span id="month">0</span> 次</p>
 
-<button onclick="checkin()">
-今日打卡🐾
-</button>
-
+<button onclick="checkin()">今日打卡🐾</button>
 <p id="message"></p>
-
 </div>
 
 <div class="card">
+<h3>補打卡申請</h3>
+<p style="font-size:14px;">限三天內，送出後需等待店家審核。</p>
+<input type="date" id="requestDate">
+<textarea id="requestReason" placeholder="補打卡原因，例如：昨天忘記掃、現場網路問題"></textarea>
+<button onclick="requestCheckin()">送出補打卡申請</button>
+<p id="requestMessage"></p>
+</div>
 
+<div class="card">
 <h3>🏆 TOP10 排行榜</h3>
-
 <div id="ranking"></div>
-
 </div>
 
 <script>
-
-const SUPABASE_URL =
-'https://lepxxpkwprfkbbitfsdh.supabase.co';
+const SUPABASE_URL = 'https://lepxxpkwprfkbbitfsdh.supabase.co';
 
 const SUPABASE_KEY =
 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlcHh4cGt3cHJma2JiaXRmc2RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNDUyNTUsImV4cCI6MjA5NDkyMTI1NX0.zKgN5XMaGtJkYHGzQge0ewBwThAMbByirfkPW-oPUrU';
 
-const LIFF_ID =
-'2010154662-DEjrZwtp';
-
+const LIFF_ID = '2010154662-DEjrZwtp';
 let profile;
 
 async function init(){
+  await liff.init({ liffId: LIFF_ID });
 
-await liff.init({
-liffId: LIFF_ID
-});
+  if(!liff.isLoggedIn()){
+    liff.login();
+    return;
+  }
 
-if(!liff.isLoggedIn()){
-liff.login();
-return;
-}
+  profile = await liff.getProfile();
+  document.getElementById('avatar').src = profile.pictureUrl;
 
-profile = await liff.getProfile();
+  const today = new Date();
+  const max = today.toISOString().split('T')[0];
+  const minDate = new Date(today);
+  minDate.setDate(today.getDate() - 3);
+  const min = minDate.toISOString().split('T')[0];
 
-document.getElementById('avatar').src =
-profile.pictureUrl;
+  document.getElementById('requestDate').max = max;
+  document.getElementById('requestDate').min = min;
 
-loadUser();
-loadRanking();
-
+  await loadUser();
+  await loadRanking();
 }
 
 async function loadUser(){
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/users?line_user_id=eq.${profile.userId}`,
+    {
+      headers:{
+        apikey:SUPABASE_KEY,
+        Authorization:`Bearer ${SUPABASE_KEY}`
+      }
+    }
+  );
 
-const res = await fetch(
-`${SUPABASE_URL}/rest/v1/users?line_user_id=eq.${profile.userId}`,
-{
-headers:{
-apikey:SUPABASE_KEY,
-Authorization:`Bearer ${SUPABASE_KEY}`
-}
-}
-);
+  const data = await res.json();
 
-const data = await res.json();
+  if(data.length > 0){
+    const u = data[0];
+    const displayName = u.custom_name || u.name || profile.displayName;
+    const icon = u.is_member ? (u.member_icon || '⭐') : '';
 
-if(data.length > 0){
+    document.getElementById('name').innerHTML =
+      `${displayName} ${icon ? `<span class="badge">${icon}</span>` : ''}`;
 
-document.getElementById('name').innerText =
-data[0].custom_name || data[0].name || profile.displayName;
-
-document.getElementById('total').innerText =
-data[0].total_count || 0;
-
-document.getElementById('year').innerText =
-data[0].year_count || 0;
-
-document.getElementById('month').innerText =
-data[0].month_count || 0;
-
-}else{
-
-document.getElementById('name').innerText =
-profile.displayName;
-
-}
-
+    document.getElementById('total').innerText = u.total_count || 0;
+    document.getElementById('year').innerText = u.year_count || 0;
+    document.getElementById('month').innerText = u.month_count || 0;
+  }else{
+    document.getElementById('name').innerText = profile.displayName;
+  }
 }
 
 async function checkin(){
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/rpc/checkin_user`,
+    {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        apikey:SUPABASE_KEY,
+        Authorization:`Bearer ${SUPABASE_KEY}`
+      },
+      body:JSON.stringify({
+        p_line_user_id:profile.userId,
+        p_name:profile.displayName,
+        p_avatar_url:profile.pictureUrl
+      })
+    }
+  );
 
-const res = await fetch(
-`${SUPABASE_URL}/rest/v1/rpc/checkin_user`,
-{
-method:'POST',
-headers:{
-'Content-Type':'application/json',
-apikey:SUPABASE_KEY,
-Authorization:`Bearer ${SUPABASE_KEY}`
-},
-body:JSON.stringify({
-p_line_user_id:profile.userId,
-p_name:profile.displayName,
-p_avatar_url:profile.pictureUrl
-})
+  const data = await res.json();
+  document.getElementById('message').innerText = data.message || '完成';
+
+  await loadUser();
+  await loadRanking();
 }
-);
 
-const data = await res.json();
+async function requestCheckin(){
+  const date = document.getElementById('requestDate').value;
+  const reason = document.getElementById('requestReason').value;
 
-document.getElementById('message').innerText =
-data.message;
+  if(!date){
+    alert('請選擇補打卡日期');
+    return;
+  }
 
-await loadUser();
-await loadRanking();
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/rpc/request_checkin`,
+    {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        apikey:SUPABASE_KEY,
+        Authorization:`Bearer ${SUPABASE_KEY}`
+      },
+      body:JSON.stringify({
+        p_line_user_id:profile.userId,
+        p_name:profile.displayName,
+        p_avatar_url:profile.pictureUrl,
+        p_request_date:date,
+        p_reason:reason
+      })
+    }
+  );
 
+  const data = await res.json();
+  document.getElementById('requestMessage').innerText = data.message || '已送出';
 }
 
 async function loadRanking(){
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/leaderboard`,
+    {
+      headers:{
+        apikey:SUPABASE_KEY,
+        Authorization:`Bearer ${SUPABASE_KEY}`
+      }
+    }
+  );
 
-const res = await fetch(
-`${SUPABASE_URL}/rest/v1/leaderboard`,
-{
-headers:{
-apikey:SUPABASE_KEY,
-Authorization:`Bearer ${SUPABASE_KEY}`
-}
-}
-);
+  const data = await res.json();
+  const ranking = document.getElementById('ranking');
+  ranking.innerHTML = '';
 
-const data = await res.json();
+  data.forEach((user,index)=>{
+    let medal = '';
+    if(index===0) medal='🥇';
+    if(index===1) medal='🥈';
+    if(index===2) medal='🥉';
 
-const ranking =
-document.getElementById('ranking');
+    const displayName = user.custom_name || user.name || '未命名';
+    const icon = user.is_member ? (user.member_icon || '⭐') : '';
 
-ranking.innerHTML = '';
-
-data.forEach((user,index)=>{
-
-let medal = '';
-
-if(index===0) medal='🥇';
-if(index===1) medal='🥈';
-if(index===2) medal='🥉';
-
-ranking.innerHTML += `
-<div class="ranking-item">
-
-<div class="left">
-<img src="${user.avatar_url || ''}">
-<div>${medal} ${user.custom_name || user.name}</div>
-</div>
-
-<div>${user.total_count || 0} 次</div>
-
-</div>
-`;
-
-});
-
+    ranking.innerHTML += `
+      <div class="ranking-item">
+        <div class="left">
+          <img src="${user.avatar_url || ''}">
+          <div>${medal} ${displayName} ${icon}</div>
+        </div>
+        <div>${user.total_count || 0} 次</div>
+      </div>
+    `;
+  });
 }
 
 init();
-
 </script>
 
 </body>
